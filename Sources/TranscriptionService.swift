@@ -1,9 +1,16 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+#if canImport(os.log)
 import os.log
+#endif
 
+#if canImport(os.log)
 private let transcriptionLog = OSLog(subsystem: "com.zachlatta.freeflow", category: "Transcription")
+#endif
 
-class TranscriptionService {
+public class TranscriptionService: @unchecked Sendable {
     private let apiKey: String
     private let baseURL: URL
     private let transcriptionModel: String
@@ -14,7 +21,7 @@ class TranscriptionService {
         return override > 0 ? override : 20
     }
 
-    init(
+    public init(
         apiKey: String,
         baseURL: String = "https://api.groq.com/openai/v1",
         transcriptionModel: String = "whisper-large-v3",
@@ -29,7 +36,7 @@ class TranscriptionService {
     }
 
     // Validate API key by hitting a lightweight endpoint
-    static func validateAPIKey(_ key: String, baseURL: String = "https://api.groq.com/openai/v1") async -> Bool {
+    public static func validateAPIKey(_ key: String, baseURL: String = "https://api.groq.com/openai/v1") async -> Bool {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
         guard let baseURL = try? normalizedBaseURL(from: baseURL) else { return false }
@@ -48,7 +55,7 @@ class TranscriptionService {
     }
 
     // Upload audio file, submit for transcription, poll until done, return text
-    func transcribe(fileURL: URL) async throws -> String {
+    public func transcribe(fileURL: URL) async throws -> String {
         guard !Task.isCancelled else {
             throw CancellationError()
         }
@@ -123,6 +130,7 @@ class TranscriptionService {
             return try validateTranscriptionResponse(data: data, response: response, fileURL: fileURL)
         } catch {
             let nsError = error as NSError
+#if canImport(os.log)
             os_log(
                 .error,
                 log: transcriptionLog,
@@ -133,6 +141,7 @@ class TranscriptionService {
                 nsError.code,
                 error.localizedDescription
             )
+#endif
             throw error
         }
     }
@@ -144,6 +153,7 @@ class TranscriptionService {
 
         guard httpResponse.statusCode == 200 else {
             let responseBody = String(data: data, encoding: .utf8) ?? ""
+#if canImport(os.log)
             os_log(
                 .error,
                 log: transcriptionLog,
@@ -153,6 +163,7 @@ class TranscriptionService {
                 fileSizeBytes(for: fileURL),
                 responseBody
             )
+#endif
             throw TranscriptionError.submissionFailed(Self.friendlyHTTPMessage(
                 status: httpResponse.statusCode,
                 host: baseURL.host
@@ -339,22 +350,26 @@ class TranscriptionService {
         }
 
         guard let segments = json["segments"] as? [[String: Any]] else {
+#if canImport(os.log)
             os_log(
                 .info,
                 log: transcriptionLog,
                 "Skipping hallucination filter for '%{public}@': provider response has no segments/no_speech metadata",
                 normalized
             )
+#endif
             return false
         }
 
         guard let noSpeechProb = segments.first?["no_speech_prob"] as? Double else {
+#if canImport(os.log)
             os_log(
                 .info,
                 log: transcriptionLog,
                 "Skipping hallucination filter for '%{public}@': provider response omitted no_speech_prob",
                 normalized
             )
+#endif
             return false
         }
         return noSpeechProb >= hallucinationNoSpeechThreshold
@@ -383,7 +398,7 @@ enum TranscriptionError: LocalizedError {
     }
 }
 
-private final class TranscriptionTimeoutRaceState {
+private final class TranscriptionTimeoutRaceState: @unchecked Sendable {
     private let lock = NSLock()
     private var didFinish = false
     private var continuation: CheckedContinuation<String, Error>?

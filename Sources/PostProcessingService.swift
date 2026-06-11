@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 enum PostProcessingError: LocalizedError {
     case requestFailed(Int, String)
@@ -23,12 +26,20 @@ enum PostProcessingError: LocalizedError {
     }
 }
 
-struct PostProcessingResult {
-    let transcript: String
-    let prompt: String
+public struct PostProcessingResult: Sendable {
+    public let transcript: String
+    public let prompt: String
 }
 
-final class PostProcessingService {
+public protocol ContextSummaryProviding {
+    var contextSummary: String { get }
+}
+
+#if canImport(AppKit)
+extension AppContext: ContextSummaryProviding {}
+#endif
+
+public final class PostProcessingService: @unchecked Sendable {
     static let defaultSystemPrompt = """
 You are a literal dictation cleanup layer for short messages, email replies, prompts, and commands.
 
@@ -137,7 +148,7 @@ Behavior:
         return override > 0 ? override : 20
     }
 
-    init(
+    public init(
         apiKey: String,
         baseURL: String = "https://api.groq.com/openai/v1",
         preferredModel: String = "",
@@ -149,14 +160,15 @@ Behavior:
         self.preferredFallbackModel = preferredFallbackModel.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    func postProcess(
+    public func postProcess<Context: ContextSummaryProviding>(
         transcript: String,
-        context: AppContext,
+        context: Context,
         customVocabulary: String,
         customSystemPrompt: String = "",
         outputLanguage: String = ""
     ) async throws -> PostProcessingResult {
         let vocabularyTerms = mergedVocabularyTerms(rawVocabulary: customVocabulary)
+        let contextSummary = context.contextSummary
 
         let timeoutSeconds = postProcessingTimeoutSeconds
         return try await withThrowingTaskGroup(of: PostProcessingResult.self) { group in
@@ -166,7 +178,7 @@ Behavior:
                 }
                 return try await self.processWithFallback(
                     transcript: transcript,
-                    contextSummary: context.contextSummary,
+                    contextSummary: contextSummary,
                     customVocabulary: vocabularyTerms,
                     customSystemPrompt: customSystemPrompt,
                     outputLanguage: outputLanguage
@@ -191,14 +203,15 @@ Behavior:
         }
     }
 
-    func commandTransform(
+    public func commandTransform<Context: ContextSummaryProviding>(
         selectedText: String,
         voiceCommand: String,
-        context: AppContext,
+        context: Context,
         customVocabulary: String,
         outputLanguage: String = ""
     ) async throws -> PostProcessingResult {
         let vocabularyTerms = mergedVocabularyTerms(rawVocabulary: customVocabulary)
+        let contextSummary = context.contextSummary
         let trimmedSelectedText = selectedText.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedVoiceCommand = voiceCommand.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedSelectedText.isEmpty else {
@@ -217,7 +230,7 @@ Behavior:
                 return try await self.processCommandTransformWithFallback(
                     selectedText: selectedText,
                     voiceCommand: voiceCommand,
-                    contextSummary: context.contextSummary,
+                    contextSummary: contextSummary,
                     customVocabulary: vocabularyTerms,
                     outputLanguage: outputLanguage
                 )
