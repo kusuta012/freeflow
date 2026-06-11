@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/zachlatta/freeflow/releases/latest/download/FreeFlow.dmg"><b>⬇ Download FreeFlow.dmg</b></a><br>
-  <sub>Works on all Macs (Apple Silicon + Intel)</sub>
+  <sub>macOS app bundle for Apple Silicon + Intel</sub>
 </p>
 
 ---
@@ -27,6 +27,8 @@
 
 FreeFlow is a free Mac dictation app inspired by [Wispr Flow](https://wisprflow.ai/), [Superwhisper](https://superwhisper.com/), and [Monologue](https://www.monologue.to/). It gives you fast AI transcription, context-aware cleanup, and voice-driven text editing without a monthly subscription.
 
+This repository now also includes a Linux-compatible terminal frontend (`freeflow-linux`) built on a shared cross-platform core (`FreeFlowCore`).
+
 ## Quick Start
 
 1. Download the app from above or [click here](https://github.com/zachlatta/freeflow/releases/latest/download/FreeFlow.dmg)
@@ -39,6 +41,48 @@ FreeFlow is a free Mac dictation app inspired by [Wispr Flow](https://wisprflow.
 - **Context-aware cleanup:** FreeFlow can read nearby app context so names, terms, and phrases are spelled correctly when you dictate into email, terminals, docs, and other apps.
 - **Custom vocabulary:** Add names, jargon, and project-specific words that FreeFlow should preserve during cleanup.
 - **OpenAI-compatible providers:** Use Groq by default, or configure a custom model and API URL in settings.
+
+## Platform support
+
+| Capability | macOS app | Linux terminal frontend |
+| --- | --- | --- |
+| Microphone capture / recording | ✅ Native AVFoundation | ✅ `arecord` fallback (`--interactive`/`--record-seconds`) |
+| Dictation shortcut / hotkey behavior | ✅ Global shortcuts | ⚠️ Terminal-local start/stop (Enter key) |
+| Transcription request flow | ✅ | ✅ |
+| Post-processing / cleanup flow | ✅ | ✅ |
+| Configurable API base URL / model settings | ✅ | ✅ CLI flags/env |
+| Custom vocabulary | ✅ | ✅ CLI flag |
+| Voice macro concept | ✅ Voice macros settings | ✅ `--voice-macro command=payload` |
+| Nearby app context | ✅ Accessibility + screenshot context | ⚠️ Manual `--context-summary` fallback |
+| Menu bar UI / overlay / app context capture | ✅ | ❌ (macOS-only) |
+
+Linux support is intentionally split from macOS-only UI/platform integrations so macOS behavior remains unchanged while Linux can run the core dictation pipeline.
+
+## Linux quick start (source build)
+
+Requirements:
+- Swift 6+
+- Optional for microphone recording: `arecord` (usually from `alsa-utils`)
+
+Build:
+
+```bash
+swift build -c release --product freeflow-linux
+```
+
+Run with an audio file:
+
+```bash
+FREEFLOW_API_KEY=your_key ./.build/release/freeflow-linux \
+  --audio-file /path/to/audio.wav \
+  --base-url https://api.groq.com/openai/v1
+```
+
+Run interactive terminal recording mode:
+
+```bash
+FREEFLOW_API_KEY=your_key ./.build/release/freeflow-linux --interactive
+```
 
 ## Edit Mode
 
