@@ -39,7 +39,7 @@ public protocol ContextSummaryProviding {
 extension AppContext: ContextSummaryProviding {}
 #endif
 
-public final class PostProcessingService: @unchecked Sendable {
+public final class PostProcessingService: Sendable {
     static let defaultSystemPrompt = """
 You are a literal dictation cleanup layer for short messages, email replies, prompts, and commands.
 
@@ -160,9 +160,9 @@ Behavior:
         self.preferredFallbackModel = preferredFallbackModel.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    public func postProcess<Context: ContextSummaryProviding>(
+    public func postProcess<ContextProvider: ContextSummaryProviding>(
         transcript: String,
-        context: Context,
+        context: ContextProvider,
         customVocabulary: String,
         customSystemPrompt: String = "",
         outputLanguage: String = ""
@@ -203,10 +203,10 @@ Behavior:
         }
     }
 
-    public func commandTransform<Context: ContextSummaryProviding>(
+    public func commandTransform<ContextProvider: ContextSummaryProviding>(
         selectedText: String,
         voiceCommand: String,
-        context: Context,
+        context: ContextProvider,
         customVocabulary: String,
         outputLanguage: String = ""
     ) async throws -> PostProcessingResult {

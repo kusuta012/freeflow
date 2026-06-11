@@ -19,6 +19,7 @@ private enum LinuxAppError: LocalizedError {
     case unknownOption(String)
     case unsupportedRecording
     case invalidRecordSeconds(String)
+    case recordingFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -35,6 +36,8 @@ private enum LinuxAppError: LocalizedError {
             """
         case .invalidRecordSeconds(let value):
             return "--record-seconds expects a positive integer, got: \(value)"
+        case .recordingFailed(let details):
+            return "Microphone recording failed: \(details)"
         }
     }
 }
@@ -198,26 +201,25 @@ struct FreeFlowLinuxApp {
     }
 
     private static func recordFixedDuration(seconds: Int, to outputURL: URL) throws {
-        let process = try makeRecordingProcess(outputURL: outputURL, durationSeconds: seconds)
-        try process.run()
-        process.waitUntilExit()
-        if process.terminationStatus != 0 {
-            throw LinuxAppError.unsupportedRecording
-        }
+        let recording = try makeRecordingProcess(outputURL: outputURL, durationSeconds: seconds)
+        try recording.process.run()
+        recording.process.waitUntilExit()
+        try verifyRecordingExit(recording)
     }
 
     private static func recordInteractively(to outputURL: URL) throws {
         print("Press Enter to start recording...")
         _ = readLine()
-        let process = try makeRecordingProcess(outputURL: outputURL, durationSeconds: nil)
-        try process.run()
+        let recording = try makeRecordingProcess(outputURL: outputURL, durationSeconds: nil)
+        try recording.process.run()
         print("Recording. Press Enter to stop...")
         _ = readLine()
-        process.terminate()
-        process.waitUntilExit()
+        recording.process.terminate()
+        recording.process.waitUntilExit()
+        try verifyRecordingExit(recording)
     }
 
-    private static func makeRecordingProcess(outputURL: URL, durationSeconds: Int?) throws -> Process {
+    private static func makeRecordingProcess(outputURL: URL, durationSeconds: Int?) throws -> (process: Process, stderr: Pipe) {
         let executablePath = "/usr/bin/env"
         guard FileManager.default.isExecutableFile(atPath: executablePath) else {
             throw LinuxAppError.unsupportedRecording
@@ -225,15 +227,30 @@ struct FreeFlowLinuxApp {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
+        let stderrPipe = Pipe()
         var arguments = ["arecord", "-f", "S16_LE", "-r", "16000", "-c", "1"]
         if let durationSeconds {
             arguments += ["-d", String(durationSeconds)]
         }
         arguments.append(outputURL.path)
         process.arguments = arguments
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        return process
+        process.standardOutput = Pipe()
+        process.standardError = stderrPipe
+        return (process, stderrPipe)
+    }
+
+    private static func verifyRecordingExit(_ recording: (process: Process, stderr: Pipe)) throws {
+        guard recording.process.terminationStatus == 0 else {
+            let data = recording.stderr.fileHandleForReading.readDataToEndOfFile()
+            let message = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let details = if let message, !message.isEmpty {
+                message
+            } else {
+                "arecord exited with status \(recording.process.terminationStatus)"
+            }
+            throw LinuxAppError.recordingFailed(details)
+        }
     }
 
     private static func applyVoiceMacros(_ macros: [VoiceMacroRule], to transcript: String) -> String {
@@ -268,7 +285,7 @@ struct FreeFlowLinuxApp {
           --post-processing-model <id>
           --post-processing-fallback-model <id>
           --custom-vocabulary <text>
-          --voice-macro command=payload    Repeatable replacement rule
+          --voice-macro command=payload    Repeatable replacement rule (applied in order)
           --context-summary <text>         Linux fallback for nearby-app context
           --output-language <language>
           --skip-post-processing

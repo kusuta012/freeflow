@@ -10,7 +10,7 @@ import os.log
 private let transcriptionLog = OSLog(subsystem: "com.zachlatta.freeflow", category: "Transcription")
 #endif
 
-public class TranscriptionService: @unchecked Sendable {
+public final class TranscriptionService: Sendable {
     private let apiKey: String
     private let baseURL: URL
     private let transcriptionModel: String
